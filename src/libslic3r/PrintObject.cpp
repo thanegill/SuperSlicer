@@ -65,6 +65,15 @@ namespace Slic3r {
         // therefore a bounding box from 1st instance of a ModelObject is good enough for calculating the object center,
         // snug height and an approximate bounding box in XY.
         BoundingBoxf3  bbox = model_object->raw_bounding_box();
+        
+        ////change the bounding box if it's a belted printer
+        //if (print->config().bed_tilt.value != 0) {
+        //    //this->model_object()->rotate(print->config().bed_tilt.value * PI / 180., Axis::X);
+        //    //bbox = model_object->raw_bounding_box();
+        //    //this->model_object()->rotate(-print->config().bed_tilt.value * PI / 180., Axis::X);
+        //    bbox = model_object->raw_bounding_box(print->config().bed_tilt.value * PI / 180.);
+        //}
+        
         Vec3d 		   bbox_center = bbox.center();
         // We may need to rotate the bbox / bbox_center from the original instance to the current instance.
         double z_diff = Geometry::rotation_diff_z(model_object->instances.front()->get_rotation(), instances.front().model_instance->get_rotation());
@@ -853,6 +862,7 @@ bool PrintObject::invalidate_state_by_config_options(
                 steps.emplace_back(posPerimeters);
             } else if (
                 opt_key == "layer_height"
+                || opt_key == "bed_tilt"
                 || opt_key == "first_layer_height"
                 || opt_key == "mmu_segmented_region_max_width"
                 || opt_key == "exact_last_layer_height"
@@ -2615,8 +2625,13 @@ PrintRegionConfig region_config_from_model_volume(const PrintRegionConfig &defau
             }
     //FIXME add painting extruders
 
-        if (object_max_z <= 0.f)
+        if (object_max_z <= 0.f) {
             object_max_z = (float)model_object.raw_bounding_box().size().z();
+            //change the bounding box if it's a belted printer
+            //if (print_config.bed_tilt.value != 0) {
+            //    object_max_z = model_object.raw_bounding_box(print_config.bed_tilt.value * PI / 180.).size().z();
+            //}
+        }
         return SlicingParameters::create_from_config(print_config, object_config, default_region_config, object_max_z, object_extruders);
     }
 

@@ -525,6 +525,15 @@ void PrintObject::slice()
 {
     if (! this->set_started(posSlice))
         return;
+    //hack for bed_tilt
+    double z_move = 0;
+    if (print()->config().bed_tilt.value != 0) {
+        //TODO: save the current trnasformations, to re-set them later (instead of doing the opposite transformation)
+        this->model_object()->rotate(print()->config().bed_tilt.value * PI / 180., Axis::X);
+        z_move = this->model_object()->get_min_z();
+        this->model_object()->translate_instances(Vec3d(0.0, 0.0, -z_move));
+        this->model_object()->translate(Vec3d(0.0, 0.0, -z_move));
+    }
     m_print->set_status(0, L("Processing triangulated mesh"));
     std::vector<coordf_t> layer_height_profile;
     this->update_layer_height_profile(*this->model_object(), *m_slicing_params, layer_height_profile);
@@ -559,7 +568,13 @@ void PrintObject::slice()
             }
         });
     if (m_layers.empty())
-        throw Slic3r::SlicingError("No layers were detected. You might want to repair your STL file(s) or check their size or thickness and retry.\n");    
+        throw Slic3r::SlicingError("No layers were detected. You might want to repair your STL file(s) or check their size or thickness and retry.\n");
+    //hack for bed_tilt
+    if (print()->config().bed_tilt.value != 0) {
+        this->model_object()->translate(Vec3d(0.0, 0.0, z_move));
+        this->model_object()->translate_instances(Vec3d(0.0, 0.0, z_move));
+        this->model_object()->rotate(-print()->config().bed_tilt.value * PI / 180, Axis::X);
+    }
     this->set_done(posSlice);
 }
 

@@ -897,6 +897,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloatOrPercent,       perimeter_speed))
     // Total number of perimeters.
     ((ConfigOptionInt,                  perimeters))
+    ((ConfigOptionInt,                  perimeters_hole))
     ((ConfigOptionPercent,              print_extrusion_multiplier))
     ((ConfigOptionFloat,                print_retract_length))
     ((ConfigOptionFloat,                print_retract_lift))
@@ -986,6 +987,7 @@ PRINT_CONFIG_CLASS_DEFINE(
 
     ((ConfigOptionBool,                arc_fitting))
     ((ConfigOptionFloatOrPercent,      arc_fitting_tolerance))
+    ((ConfigOptionFloat,               bed_tilt))
     ((ConfigOptionString,              before_layer_gcode))
     ((ConfigOptionString,              between_objects_gcode))
     ((ConfigOptionFloats,              deretract_speed))

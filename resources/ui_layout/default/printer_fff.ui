@@ -2,8 +2,9 @@
 page:General:printer
 group:Size and coordinates
 	bed_shape
-	line:build volume
 		setting:max_print_height
+	setting:bed_tilt
+	line:build volume
 		setting:init_z_rotate
 	end_line
 	line:z utilities

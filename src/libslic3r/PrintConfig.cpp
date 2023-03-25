@@ -641,6 +641,16 @@ void PrintConfigDef::init_fff_params()
     def->mode = comSimpleAE | comPrusa;
     def->set_default_value(new ConfigOptionInts { 0 });
 
+    def = this->add("bed_tilt", coFloat);
+    def->label = L("Bed tilt");
+    def->category = OptionCategory::general;
+    def->tooltip = L("Tilt of the bed. For belted printers. If the value is different of 0, then the printer is considered belted and axis y and z are inverted (in the output gcode)."
+        "\nTypical value for a belted printer is 45°."
+        " When using a belted printer, many settings are considered differently (like first layer height), or are are disabled.");
+    def->sidetext = L("°");
+    def->mode = comAdvancedE | comSuSi;
+    def->set_default_value(new ConfigOptionFloat(0));
+
     def = this->add("before_layer_gcode", coString);
     def->label = L("Before layer change G-code");
     def->category = OptionCategory::customgcode;
@@ -7525,6 +7535,7 @@ std::unordered_set<std::string> prusa_export_to_remove_keys = {
 "arc_fitting",
 "arc_fitting_tolerance",
 "avoid_crossing_not_first_layer",
+"bed_tilt",
 "bridge_fill_pattern",
 "bridge_internal_acceleration",
 "bridge_internal_fan_speed",

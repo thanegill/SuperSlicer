@@ -982,9 +982,14 @@ const BoundingBoxf3& ModelObject::raw_mesh_bounding_box() const
     if (! m_raw_mesh_bounding_box_valid) {
         m_raw_mesh_bounding_box_valid = true;
         m_raw_mesh_bounding_box.reset();
+        //TODO: maybe not useful to use belted_rotation here?
+        Transform3d inst_matrix = Transform3d::Identity();
+        if (this->m_belted_rotation != 0) {
+            inst_matrix.rotate(Eigen::Quaterniond(Eigen::AngleAxisd(m_belted_rotation, Vec3d::UnitX())));
+        }
         for (const ModelVolume *v : this->volumes)
             if (v->is_model_part())
-                m_raw_mesh_bounding_box.merge(v->mesh().transformed_bounding_box(v->get_matrix()));
+                m_raw_mesh_bounding_box.merge(v->mesh().transformed_bounding_box(inst_matrix * v->get_matrix()));
     }
     return m_raw_mesh_bounding_box;
 }
@@ -992,8 +997,13 @@ const BoundingBoxf3& ModelObject::raw_mesh_bounding_box() const
 BoundingBoxf3 ModelObject::full_raw_mesh_bounding_box() const
 {
 	BoundingBoxf3 bb;
+    //TODO: maybe not useful to use belted_rotation here?
+    Transform3d inst_matrix = Transform3d::Identity();
+    if (this->m_belted_rotation != 0) {
+        inst_matrix.rotate(Eigen::Quaterniond(Eigen::AngleAxisd(m_belted_rotation, Vec3d::UnitX())));
+    }
 	for (const ModelVolume *v : this->volumes)
-		bb.merge(v->mesh().transformed_bounding_box(v->get_matrix()));
+		bb.merge(v->mesh().transformed_bounding_box(inst_matrix * v->get_matrix()));
 	return bb;
 }
 
@@ -1007,7 +1017,10 @@ const BoundingBoxf3& ModelObject::raw_bounding_box() const
         if (this->instances.empty())
             throw Slic3r::InvalidArgument("Can't call raw_bounding_box() with no instances");
 
-        const Transform3d& inst_matrix = this->instances.front()->get_transformation().get_matrix(true);
+        Transform3d inst_matrix = this->instances.front()->get_transformation().get_matrix(true);
+        if (this->m_belted_rotation != 0) {
+            inst_matrix.rotate(Eigen::Quaterniond(Eigen::AngleAxisd(m_belted_rotation, Vec3d::UnitX())));
+        }
         for (const ModelVolume *v : this->volumes)
         {
             if (v->is_model_part())
@@ -1025,7 +1038,10 @@ BoundingBoxf3 ModelObject::instance_bounding_box(size_t instance_idx, bool dont_
 BoundingBoxf3 ModelObject::instance_bounding_box(const ModelInstance & instance, bool dont_translate) const
 {
     BoundingBoxf3 bb;
-    const Transform3d& inst_matrix = instance.get_transformation().get_matrix(dont_translate);
+    Transform3d inst_matrix = instance.get_transformation().get_matrix(dont_translate);
+    if (this->m_belted_rotation != 0) {
+        inst_matrix.rotate(Eigen::Quaterniond(Eigen::AngleAxisd(m_belted_rotation, Vec3d::UnitX())));
+    }
     for (ModelVolume* v : this->volumes)
     {
         if (v->is_model_part())

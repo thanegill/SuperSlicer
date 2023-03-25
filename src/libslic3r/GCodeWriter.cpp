@@ -428,16 +428,22 @@ std::string GCodeWriter::travel_to_xy(const Vec2d &point, const double speed, co
     if ((speed > 0) & (speed < travel_speed))
         travel_speed = speed;
 
-    m_pos.x() = point.x();
-    m_pos.y() = point.y();
+    if (this->config.bed_tilt.value != 0) {
+        //move y
+        m_pos.x() = point.x();
+        m_pos.y() = point.y() - m_pos.z() * cos(this->config.bed_tilt.value);
+    } else {
+        m_pos.x() = point.x();
+        m_pos.y() = point.y();
+    }
     
 //    GCodeG1Formatter w;
 //    w.emit_xy(point);
 //    w.emit_f(this->config.travel_speed.value * 60.0);
 //    w.emit_comment(this->config.gcode_comments, comment);
 //    return w.string();
-    gcode << "G1 X" << XYZ_NUM(point.x())
-          <<   " Y" << XYZ_NUM(point.y())
+    gcode << "G1 X" << XYZ_NUM(m_pos.x())
+          <<   " Y" << XYZ_NUM(m_pos.y())
           <<   " F" << F_NUM(travel_speed * 60);
     COMMENT(comment);
     gcode << "\n";
@@ -468,7 +474,14 @@ std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const double speed, c
     /*  In all the other cases, we perform an actual XYZ move and cancel
         the lift. */
     m_lifted = 0;
-    m_pos = point;
+    if (this->config.bed_tilt.value != 0) {
+        //move y
+        m_pos.x() = point.x();
+        m_pos.z() = point.z();
+        m_pos.y() = point.y() - m_pos.z() * cos(this->config.bed_tilt.value);
+    } else {
+        m_pos = point;
+    }
 
     double travel_speed = this->config.travel_speed.value;
     if ((speed > 0) & (speed < travel_speed))
@@ -541,15 +554,21 @@ bool GCodeWriter::will_move_z(double z) const
 std::string GCodeWriter::extrude_to_xy(const Vec2d &point, double dE, const std::string &comment)
 {
     assert(dE == dE);
-    m_pos.x() = point.x();
-    m_pos.y() = point.y();
+    if (this->config.bed_tilt.value != 0) {
+        //move y
+        m_pos.x() = point.x();
+        m_pos.y() = point.y() - m_pos.z() * cos(this->config.bed_tilt.value);
+    } else {
+        m_pos.x() = point.x();
+        m_pos.y() = point.y();
+    }
     bool is_extrude = m_tool->extrude(dE) != 0;
 
     std::ostringstream gcode;
     gcode << write_acceleration();
-    gcode << "G1 X" << XYZ_NUM(point.x())
-        << " Y" << XYZ_NUM(point.y());
-    if(is_extrude)
+    gcode << "G1 X" << XYZ_NUM(m_pos.x())
+        << " Y" << XYZ_NUM(m_pos.y());
+    if (is_extrude)
         gcode <<    " " << m_extrusion_axis << E_NUM(m_tool->E());
     COMMENT(comment);
     gcode << "\n";

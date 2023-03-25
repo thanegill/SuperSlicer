@@ -247,6 +247,9 @@ ENABLE_ENUM_BITMASK_OPERATORS(ModelObjectCutAttribute);
 // different rotation and different uniform scaling.
 class ModelObject final : public ObjectBase
 {
+protected:
+    // for belted printer. it's hown flat but sliced rotated.
+    float                   m_belted_rotation;
 public:
     std::string             name;
     std::string             input_file;    // XXX: consider fs::path
@@ -265,6 +268,7 @@ public:
     LayerHeightProfile      layer_height_profile;
     // Whether or not this object is printable
     bool                    printable;
+
 
     // This vector holds position of selected support points for SLA. The data are
     // saved in mesh coordinates to allow using them for several instances.
@@ -307,6 +311,9 @@ public:
     void                    delete_instance(size_t idx);
     void                    delete_last_instance();
     void                    clear_instances();
+
+    void                    set_belt_rotation(float rotation_radian) { m_belted_rotation = rotation_radian; this->invalidate_bounding_box(); }
+    float                   get_belt_rotation() const { return m_belted_rotation; }
 
     // Returns the bounding box of the transformed instances.
     // This bounding box is approximate and not snug.

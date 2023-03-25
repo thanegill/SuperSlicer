@@ -1444,6 +1444,8 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
     // Update SlicingParameters for each object where the SlicingParameters is not valid.
     // If it is not valid, then it is ensured that PrintObject.m_slicing_params is not in use
     // (posSlicing and posSupportMaterial was invalidated).
+    for (PrintObject* object : m_objects)
+        object->model_object()->set_belt_rotation(this->config().bed_tilt.value);
     for (PrintObject *object : m_objects)
         object->update_slicing_parameters();
 
