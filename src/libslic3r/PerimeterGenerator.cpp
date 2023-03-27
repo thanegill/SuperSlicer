@@ -41,11 +41,16 @@ namespace Slic3r {
 struct LoopAssertVisitor : public ExtrusionVisitorRecursiveConst {
     virtual void default_use(const ExtrusionEntity& entity) override {};
     virtual void use(const ExtrusionLoop& loop) override {
+        for(const ExtrusionPath& path : loop.paths)
+            assert(!path.can_reverse() || path.role() == erGapFill);
         for (auto it = std::next(loop.paths.begin()); it != loop.paths.end(); ++it) {
             assert(it->polyline.size() >= 2);
             assert(std::prev(it)->polyline.back() == it->polyline.front());
         }
         assert(loop.paths.front().first_point() == loop.paths.back().last_point());
+    }
+    virtual void use(const ExtrusionPath& path) override {
+        assert(!path.can_reverse() || path.role() == erGapFill);
     }
 };
 #endif
@@ -370,8 +375,11 @@ ProcessSurfaceResult PerimeterGenerator::process_arachne(int& loop_number, const
     return result;
 }
 
+#include <mutex>
+std::mutex monothread;
 void PerimeterGenerator::process()
 {
+    std::lock_guard lock{ monothread };
     // other perimeters
     this->m_mm3_per_mm = this->perimeter_flow.mm3_per_mm();
     this->perimeter_width = this->perimeter_flow.scaled_width();
@@ -425,6 +433,25 @@ void PerimeterGenerator::process()
     //const coord_t min_spacing     = (coord_t)( perimeter_spacing      * (1 - 0.05/*INSET_OVERLAP_TOLERANCE*/) );
     //const coord_t ext_min_spacing = (coord_t)( ext_perimeter_spacing2  * (1 - 0.05/*INSET_OVERLAP_TOLERANCE*/) );
     // now the tolerance is built in thin_periemter settings
+    
+    // where the belt is
+    m_belt_support.points.clear();
+    if (print_config->bed_tilt.value != 0 && layer->supported_y < std::numeric_limits<coordf_t>::max()/2) {
+        m_belt_support.points.push_back(Point{ -COORD_T_MAX , COORD_T_MAX });
+        m_belt_support.points.push_back(Point{ -COORD_T_MAX , scale_t(layer->supported_y) });
+        m_belt_support.points.push_back(Point{ COORD_T_MAX , scale_t(layer->supported_y) });
+        m_belt_support.points.push_back(Point{ COORD_T_MAX , COORD_T_MAX });
+        //contour are anti-clockwise
+        m_belt_support.make_counter_clockwise();
+        if (lower_slices && lower_slices->size() > 0) {
+            std::cout << "make_peri " << layer->id() << " z=" << layer->bottom_z() << "->" << layer->print_z << ", lsclices:" << layer->lslices.size() << "\n";
+            std::cout << layer->lslices[0].contour.points[0];
+            for (size_t i = 0; i < lower_slices->front().contour.points.size(); ++i)
+                std::cout << " : " << lower_slices->front().contour.points[i];
+            std::cout << "\n";
+        }
+    }
+
 
     // prepare grown lower layer slices for overhang detection
     if (this->lower_slices != NULL && (this->config->overhangs_width.value > 0 || this->config->overhangs_width_speed.value > 0)) {
@@ -457,9 +484,16 @@ void PerimeterGenerator::process()
         if (overhangs_width_speed > 0 || overhangs_width_flow > 0) {
             ExPolygons simplified;
             //simplify the lower slices if too high (means low number) resolution (we can be very aggressive here)
-            if (this->print_config->resolution < min_feature / 2) {
-                for (const ExPolygon& expoly : *lower_slices) {
-                    expoly.simplify(min_feature, &simplified);
+            if (this->print_config->resolution < min_feature / 2 || !m_belt_support.empty()) {
+                if (this->print_config->resolution < min_feature / 2) {
+                    for (const ExPolygon& expoly : *lower_slices) {
+                        expoly.simplify(min_feature, &simplified);
+                    }
+                } else {
+                    simplified = *lower_slices;
+                }
+                if (!m_belt_support.empty()) {
+                    simplified.push_back(ExPolygon(m_belt_support));
                 }
             }
 
@@ -630,6 +664,9 @@ void PerimeterGenerator::processs_no_bridge(Surfaces& all_surfaces) {
             ExPolygons last = { surface->expolygon };
             //compute our unsupported surface
             ExPolygons unsupported = diff_ex(last, *this->lower_slices, ApplySafetyOffset::Yes);
+            if (!m_belt_support.empty()) {
+                unsupported = diff_ex(unsupported, ExPolygons{ ExPolygon(m_belt_support) });
+            }
             if (!unsupported.empty()) {
                 //remove small overhangs
                 ExPolygons unsupported_filtered = offset2_ex(unsupported, double(-this->get_perimeter_spacing()), double(this->get_perimeter_spacing()));
@@ -861,7 +898,7 @@ ProcessSurfaceResult PerimeterGenerator::process_classic(int& loop_number, const
         ExPolygons overhangs_unsupported;
         if ((this->config->extra_perimeters_overhangs || (this->config->overhangs_reverse && this->layer->id() % 2 == 1))
             && !last.empty() && this->lower_slices != NULL && !this->lower_slices->empty()) {
-            //remove holes from lower layer, we only ant that for overhangs, not bridges!
+            //remove holes from lower layer, we only want that for overhangs, not bridges!
             ExPolygons lower_without_holes;
             for (const ExPolygon& exp : *this->lower_slices)
                 lower_without_holes.emplace_back(to_expolygon(exp.contour));
@@ -1687,6 +1724,9 @@ ExtrusionPaths PerimeterGenerator::create_overhangs(const Polyline& loop_polygon
         assert(path.width == path.width);
         assert(path.height == path.height);
         paths.push_back(path);
+#if _DEBUG
+            path.visit(LoopAssertVisitor{});
+#endif
         return paths;
     
     }
@@ -1967,8 +2007,13 @@ ExtrusionPaths PerimeterGenerator::create_overhangs(const Polyline& loop_polygon
     //set correct height
     for (ExtrusionPath& path : paths) {
         path.height = path.height < 3 ? (float)this->layer->height : this->overhang_flow.height();
+        path.set_can_reverse(false);
     }
 
+#if _DEBUG
+    for (auto& path : paths)
+        path.visit(LoopAssertVisitor{});
+#endif
     return paths;
 }
 
@@ -2453,6 +2498,10 @@ ExtrusionEntityCollection PerimeterGenerator::_traverse_loops(
             can_overhang = false;
         if (can_overhang) {
             paths = this->create_overhangs(loop.polygon.split_at_first_point(), role, is_external);
+#if _DEBUG
+            for(auto& path:paths)
+                path.visit(LoopAssertVisitor{});
+#endif
         } else {
             ExtrusionPath path(role, false);
             path.polyline   = loop.polygon.split_at_first_point();
@@ -2472,6 +2521,9 @@ ExtrusionEntityCollection PerimeterGenerator::_traverse_loops(
         }
 
         coll.push_back(new ExtrusionLoop(paths, loop_role));
+#if _DEBUG
+        coll.back()->visit(LoopAssertVisitor{});
+#endif
     }
     
     // append thin walls to the nearest-neighbor search (only for first iteration)

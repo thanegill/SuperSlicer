@@ -48,6 +48,8 @@ using coordf_t = double;
 // with int64_t we don't have to worry anymore about the size of the int.
 static constexpr double SCALING_FACTOR = 0.000001;
 static constexpr double UNSCALING_FACTOR = 1000000; // 1 / SCALING_FACTOR; <- linux has some problem compiling this constexpr
+//we use clipper in 64 bits, 2 high bits are reserved by clipper. and 17 are used to improve precision. So there is only 45 really useful, so 35184372088832
+static constexpr coord_t COORD_T_MAX = 17592186044416LL;
 
 //FIXME This epsilon value is used for many non-related purposes:
 // For a threshold of a squared Euclidean distance,

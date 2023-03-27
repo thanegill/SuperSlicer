@@ -94,6 +94,16 @@ namespace Slic3r {
         m_config.parent = &print->config();
     }
 
+    std::shared_ptr<PrintObject> PrintObject::create_from_instance(size_t instance_idx) {
+        assert(instance_idx < m_instances.size());
+        std::shared_ptr<PrintObject> out;
+        out.reset(new PrintObject{*this});
+        out->m_instances.clear();
+        out->m_instances.push_back(this->m_instances[instance_idx]);
+        //TODO: maybe remove brim/skirt? they should be deactivated anyway in a tilted thing...
+        return out;
+    }
+
     PrintBase::ApplyStatus PrintObject::set_instances(PrintInstances&& instances)
     {
         for (PrintInstance& i : instances)
@@ -2589,9 +2599,26 @@ PrintRegionConfig region_config_from_model_volume(const PrintRegionConfig &defau
 
     void PrintObject::update_slicing_parameters()
     {
+        double max_height = this->model_object()->bounding_box().max.z();
+        if (this->print()->config().bed_tilt.value != 0) {
+            //the z is a component of y and z
+            BoundingBoxf3 bb = this->model_object()->raw_bounding_box();
+
+            //BoundingBoxf3 bb_tilted = this->model_object()->raw_bounding_box(Geometry::deg2rad(print()->config().bed_tilt.value));
+            double s = std::sin(Geometry::deg2rad(print()->config().bed_tilt.value));
+            double c = std::cos(Geometry::deg2rad(print()->config().bed_tilt.value));
+            max_height = 0;
+            // tiltedz: first, we keep some space for the support
+            max_height += std::abs(c) < 0.0001 ? 0 : (s * s / c) * bb.max.z();
+            // tiltedz: then we extrude the part, from bot y to top y
+            max_height += s * (bb.max.y() - bb.min.y());
+            // tiltedz: then we the part on top that can't touch the bed
+            max_height += c * bb.max.z();
+
+        }
         if (!m_slicing_params || !m_slicing_params->valid)
             m_slicing_params = SlicingParameters::create_from_config(
-                this->print()->config(), m_config, this->print()->default_region_config(), this->model_object()->bounding_box().max.z(), this->object_extruders());
+                this->print()->config(), m_config, this->print()->default_region_config(), max_height, this->object_extruders());
     }
 
     std::shared_ptr<SlicingParameters> PrintObject::slicing_parameters(const DynamicPrintConfig& full_config, const ModelObject& model_object, float object_max_z)

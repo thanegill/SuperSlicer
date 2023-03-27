@@ -1690,7 +1690,7 @@ static std::vector<stl_vertex> transform_mesh_vertices_for_slicing(const indexed
             v.y() *= float(s);
         }
     } else {
-        // Transform the vertices, scale up in XY, not in Y.
+        // Transform the vertices, scale up in XY, not in Z.
         auto t = trafo;
         t.prescale(Vec3d(s, s, 1.));
         auto tf = t.cast<float>();

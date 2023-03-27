@@ -142,7 +142,7 @@ namespace Slic3r {
         for (double diam : this->print_config->nozzle_diameter.values)
             max_first_layer = std::max(max_first_layer, config->milling_after_z.get_abs_value(this->object_config->first_layer_height.get_abs_value(diam)));
         return !print_config->milling_diameter.values.empty() && config->milling_post_process
-            && layer->bottom_z() >= max_first_layer;
+            && layer->bottom_z() >= max_first_layer && print_config->bed_tilt == 0;
     }
 
     ExPolygons MillingPostProcess::get_unmillable_areas(const Layer* layer)

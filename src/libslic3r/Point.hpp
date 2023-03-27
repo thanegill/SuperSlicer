@@ -137,10 +137,10 @@ public:
     // This constructor allows you to construct Point from Eigen expressions
     template<typename OtherDerived>
     Point(const Eigen::MatrixBase<OtherDerived> &other) : Vec2crd(other) {}
-    static Point new_scale(coordf_t x, coordf_t y) { return Point(coord_t(scale_(x)), coord_t(scale_(y))); }
-    static Point new_scale(const Point &p) { return Point(coord_t(scale_(p.x())), coord_t(scale_(p.y()))); }
-    static Point new_scale(const Vec2d &p) { return Point(scale_(p.x()), scale_(p.y())); }
-    static Point new_scale(const Vec2f &v) { return Point(coord_t(scale_(v.x())), coord_t(scale_(v.y()))); }
+    static Point new_scale(coordf_t x, coordf_t y) { return Point(scale_t(x), scale_t(y)); }
+    static Point new_scale(const Point &p) { return Point(scale_t(p.x()), scale_t(p.y())); }
+    static Point new_scale(const Vec2d &p) { return Point(scale_t(p.x()), scale_t(p.y())); }
+    static Point new_scale(const Vec2f &v) { return Point(scale_t(v.x()), scale_t(v.y())); }
 
     // This method allows you to assign Eigen expressions to MyVectorType
     template<typename OtherDerived>
@@ -430,7 +430,8 @@ private:
     coord_t  m_grid_log2;
 };
 
-std::ostream& operator<<(std::ostream &stm, const Vec2d &pointf);
+std::ostream& operator<<(std::ostream& stm, const Vec2d& pointf);
+std::ostream& operator<<(std::ostream& stm, const Point& point);
 
 
 // /////////////////////////////////////////////////////////////////////////////

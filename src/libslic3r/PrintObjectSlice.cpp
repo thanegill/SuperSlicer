@@ -526,21 +526,68 @@ void PrintObject::slice()
     if (! this->set_started(posSlice))
         return;
     //hack for bed_tilt
-    double z_move = 0;
-    if (print()->config().bed_tilt.value != 0) {
-        //TODO: save the current trnasformations, to re-set them later (instead of doing the opposite transformation)
-        this->model_object()->rotate(print()->config().bed_tilt.value * PI / 180., Axis::X);
-        z_move = this->model_object()->get_min_z();
-        this->model_object()->translate_instances(Vec3d(0.0, 0.0, -z_move));
-        this->model_object()->translate(Vec3d(0.0, 0.0, -z_move));
+    double previous_z = 0, z_move = 0;
+    std::map< ModelVolume*, Geometry::Transformation> volume_trsf_save; // to restor at the end of slicing
+    Point center_offset = m_center_offset;
+    BoundingBoxf3 raw_bb;
+    if (print()->config().bed_tilt.value > 1) {
+        raw_bb = this->model_object()->raw_bounding_box();
+        previous_z = this->model_object()->get_min_z();
+        double rad_angle = Geometry::deg2rad(print()->config().bed_tilt.value);
+        for (ModelVolume* v : this->model_object()->volumes) {
+            volume_trsf_save[v] = v->get_transformation();
+            v->rotate(rad_angle, Axis::X);
+        }
+        float s = (float)std::sin(Geometry::deg2rad(print()->config().bed_tilt.value));
+        float c = (float)std::cos(Geometry::deg2rad(print()->config().bed_tilt.value));
+        //set that nothing is under Z
+        m_zcenter_offset = scale_t(previous_z - this->model_object()->get_min_z());
+        //also add at least enough space for support
+        //iterate on each vertex.
+        float min_y = 0;
+        float min_yz = 0;
+        Transform3d t = this->trafo_centered();
+        auto tf = t.cast<float>();
+        for (ModelVolume* v : this->model_object()->volumes) {
+            Transform3d tv = t * v->get_matrix();
+            auto tvf = tv.cast<float>();
+            //keep farthest projection
+            for (const stl_vertex& v : v->mesh().its.vertices) {
+                stl_vertex vt = tf * v;
+                min_y = std::min(min_y, vt.y());
+                min_yz = std::min(min_yz, c* vt.y() - vt.z()*s*s/c);
+            }
+        }
+        std::cout << "min_y=" << min_y << ", min_yz=" << min_yz << "\n";
+        std::cout << "dy=" << min_y << "dz=" << (min_y * s / c) << ", min_yz=" << min_yz << "\n";
+        // the min y is now at 0. the slicing will begin at 0
+        m_center_offset.y() += scale_t(min_y);
+        //move the part up more to compensate for the y move
+        m_zcenter_offset -= scale_t(min_y * s/c);
+        t = this->trafo_centered();
+        tf = t.cast<float>();
+        for (ModelVolume* v : this->model_object()->volumes) {
+            Transform3d tv = t * v->get_matrix();
+            auto tvf = tv.cast<float>();
+            //keep farthest projection
+            for (const stl_vertex& v : v->mesh().its.vertices) {
+                stl_vertex vt = tf * v;
+                min_y = std::min(min_y, vt.y());
+                min_yz = std::min(min_yz, c * vt.y() - vt.z() * s * s / c);
+            }
+        }
     }
     m_print->set_status(0, L("Processing triangulated mesh"));
     std::vector<coordf_t> layer_height_profile;
+    //update_layer_height_profile create layer_height_profile from m_slicing_params, model_object.layer_height_profile or model_object.layer_config_ranges
     this->update_layer_height_profile(*this->model_object(), *m_slicing_params, layer_height_profile);
     m_print->throw_if_canceled();
     m_typed_slices = false;
     this->clear_layers();
+    //generate_object_layers is creating the zheight of each layers from layer_height_profile
+    //new_layers creates the Layer object from these z-height (filling the z pos and the idx)
     m_layers = new_layers(this, generate_object_layers(*m_slicing_params, layer_height_profile));
+    // slice the scliceable volumes
     this->slice_volumes();
     m_print->throw_if_canceled();
     // Fix the model.
@@ -549,6 +596,20 @@ void PrintObject::slice()
     m_print->throw_if_canceled();
     if (! warning.empty())
         BOOST_LOG_TRIVIAL(info) << warning;
+
+    //add "supported" volumes into each layer (belted printer)
+    if (print()->config().bed_tilt.value > 1) {
+        //start at y=0 where the 
+        double dy = std::tan(print()->config().bed_tilt.value * PI / 180.);
+        for (Layer* layer : m_layers) {
+            std::cout << "layer " << layer->id() << " z=" << layer->bottom_z() << "->" << layer->print_z << ", lsclices:"<< layer->lslices.size()<< "\n";
+            std::cout << layer->lslices[0].contour.points[0];
+            for(size_t i = 1 ; i< layer->lslices[0].contour.points.size(); ++i)
+                std::cout << " : " << layer->lslices[0].contour.points[i];
+            std::cout << "\n";
+            layer->supported_y = layer->bottom_z() * dy - layer->height; // use layer->height as buffer TODO: better buffer (from cos(angle))
+        }
+    }
 
     //create polyholes
     this->_transform_hole_to_polyholes();
@@ -571,9 +632,11 @@ void PrintObject::slice()
         throw Slic3r::SlicingError("No layers were detected. You might want to repair your STL file(s) or check their size or thickness and retry.\n");
     //hack for bed_tilt
     if (print()->config().bed_tilt.value != 0) {
-        this->model_object()->translate(Vec3d(0.0, 0.0, z_move));
-        this->model_object()->translate_instances(Vec3d(0.0, 0.0, z_move));
-        this->model_object()->rotate(-print()->config().bed_tilt.value * PI / 180, Axis::X);
+        for (ModelVolume* v : this->model_object()->volumes) {
+            assert(volume_trsf_save.find(v) != volume_trsf_save.end());
+            v->set_transformation(volume_trsf_save[v]);
+        }
+        m_zcenter_offset = 0;
     }
     this->set_done(posSlice);
 }

@@ -246,8 +246,8 @@ private:
 
     void            _init_multiextruders(Print& print, GCodeOutputStream& file, GCodeWriter& writer, ToolOrdering& tool_ordering, const std::string& custom_gcode);
 
-    static std::vector<LayerToPrint>        		                   collect_layers_to_print(const PrintObject &object);
-    static std::vector<std::pair<coordf_t, std::vector<LayerToPrint>>> collect_layers_to_print(const Print &print);
+    std::vector<LayerToPrint>        		                   collect_layers_to_print(const PrintObject &object);
+    std::vector<std::pair<coordf_t, std::vector<LayerToPrint>>> collect_layers_to_print(const PrintObjectPtrs &print_objects);
 
     LayerResult process_layer(
         const Print                     &print,
@@ -475,6 +475,8 @@ private:
 
     // Heights (print_z) at which the skirt has already been extruded.
     std::vector<coordf_t>               m_skirt_done;
+    // to disable the skirt (TODO: add fake layers for it to be printed)
+    bool                                m_no_skirt; 
     // Has the brim been extruded already? Brim is being extruded only for the first object of a multi-object print.
     bool                                m_brim_done;
     // Flag indicating whether the nozzle temperature changes from 1st to 2nd layer were performed.
@@ -529,7 +531,7 @@ private:
     friend class PressureEqualizer;
 };
 
-std::vector<const PrintInstance*> sort_object_instances_by_model_order(const Print& print);
+std::vector<const PrintInstance*> sort_object_instances_by_model_order(const Print& print, const PrintObjectPtrs& print_objects);
 
 }
 

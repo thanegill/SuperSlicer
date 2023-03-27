@@ -245,9 +245,13 @@ Point Point::interpolate(const double percent, const Point &p2) const
     return p_out;
 }
 
-std::ostream& operator<<(std::ostream &stm, const Vec2d &pointf)
+std::ostream& operator<<(std::ostream& stm, const Vec2d& pointf)
 {
     return stm << pointf(0) << "," << pointf(1);
+}
+std::ostream& operator<<(std::ostream& stm, const Point& point)
+{
+    return stm << int32_t(100*unscaled(point.x()))/100.0f << "," << int32_t(100 * unscaled(point.y())) / 100.0f;
 }
 
 namespace int128 {

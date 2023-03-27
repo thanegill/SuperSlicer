@@ -593,7 +593,9 @@ bool Print::sequential_print_horizontal_clearance_valid(const Print &print, Poly
 
 static inline bool sequential_print_vertical_clearance_valid(const Print &print)
 {
-	std::vector<const PrintInstance*> print_instances_ordered = sort_object_instances_by_model_order(print);
+    PrintObjectPtrs objs;
+    for (PrintObject* obj : print.objects()) objs.push_back(obj);
+	std::vector<const PrintInstance*> print_instances_ordered = sort_object_instances_by_model_order(print, objs);
 	// Ignore the last instance printed.
 	print_instances_ordered.pop_back();
 	// Find the other highest instance.
@@ -1229,10 +1231,12 @@ void Print::process()
         } else {
             this->set_status(55, L("Simplifying paths"));
         }
-        for (PrintObject* obj : m_objects) {
-            obj->simplify_extrusion_path();
-        }
         //also simplify object skirt & brim
+        if (enable_arc_fitting) {
+            for (PrintObject* obj : m_objects) {
+                obj->simplify_extrusion_path();
+            }
+        }
         if (enable_arc_fitting && (!this->m_skirt.empty() || !this->m_brim.empty())) {
             coordf_t scaled_resolution = scale_d(config().resolution.value);
             if (scaled_resolution == 0) scaled_resolution = enable_arc_fitting ? SCALED_EPSILON * 2 : SCALED_EPSILON;

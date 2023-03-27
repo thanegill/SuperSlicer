@@ -133,6 +133,7 @@ private:
     Polygons    _lower_slices_bridge_flow_big;
     Polygons    _lower_slices_bridge_speed_small;
     Polygons    _lower_slices_bridge_speed_big;
+    Polygon     m_belt_support;
     ClipperLib_Z::Paths m_lower_slices_clipperpaths;
     ClipperLib_Z::Paths _lower_slices_bridge_flow_small_clipperpaths;
     ClipperLib_Z::Paths _lower_slices_bridge_flow_big_clipperpaths;

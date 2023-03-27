@@ -82,7 +82,7 @@ std::shared_ptr<SlicingParameters> SlicingParameters::create_from_config(
 	const PrintConfig 		&print_config,
     const PrintObjectConfig &object_config,
     const PrintRegionConfig &default_region_config,
-	coordf_t				 object_height,
+	double                   object_height,
 	const std::set<uint16_t> &object_extruders)
 {
     // if the first_layer_height setting depends of the nozzle width, use the first one. Apply the z_step

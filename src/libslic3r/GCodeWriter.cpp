@@ -1,6 +1,7 @@
 #include "GCodeWriter.hpp"
 #include "CustomGCode.hpp"
 #include "LocalesUtils.hpp"
+#include "Geometry.hpp"
 
 #include <boost/lexical_cast.hpp>
 
@@ -37,6 +38,11 @@ void GCodeWriter::apply_print_config(const PrintConfig &print_config)
     this->config.apply(print_config, true);
     m_extrusion_axis = get_extrusion_axis(this->config);
     m_single_extruder_multi_material = print_config.single_extruder_multi_material.value;
+    if (print_config.bed_tilt > 1) {
+        m_sintilt = (float)std::sin(Geometry::deg2rad(print_config.bed_tilt.value));
+        m_costilt = (float)std::cos(Geometry::deg2rad(print_config.bed_tilt.value));
+        m_cos_div_sin_tilt = m_costilt / m_sintilt;
+    }
 }
 
 void GCodeWriter::apply_print_region_config(const PrintRegionConfig& print_region_config)
@@ -431,7 +437,7 @@ std::string GCodeWriter::travel_to_xy(const Vec2d &point, const double speed, co
     if (this->config.bed_tilt.value != 0) {
         //move y
         m_pos.x() = point.x();
-        m_pos.y() = point.y() - m_pos.z() * cos(this->config.bed_tilt.value);
+        m_pos.y() = m_pos.z() * m_cos_div_sin_tilt - point.y();
     } else {
         m_pos.x() = point.x();
         m_pos.y() = point.y();
@@ -478,7 +484,9 @@ std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const double speed, c
         //move y
         m_pos.x() = point.x();
         m_pos.z() = point.z();
-        m_pos.y() = point.y() - m_pos.z() * cos(this->config.bed_tilt.value);
+        // if z == y, then y=> 0 as the bed is at y=0 on tilted bed.
+        // it's not possible to have something with y > z
+        m_pos.y() = m_pos.z() * m_cos_div_sin_tilt - point.y();
     } else {
         m_pos = point;
     }
@@ -557,7 +565,7 @@ std::string GCodeWriter::extrude_to_xy(const Vec2d &point, double dE, const std:
     if (this->config.bed_tilt.value != 0) {
         //move y
         m_pos.x() = point.x();
-        m_pos.y() = point.y() - m_pos.z() * cos(this->config.bed_tilt.value);
+        m_pos.y() = m_pos.z() * m_cos_div_sin_tilt - point.y();
     } else {
         m_pos.x() = point.x();
         m_pos.y() = point.y();

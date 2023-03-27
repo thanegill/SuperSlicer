@@ -912,6 +912,10 @@ const BoundingBoxf3& ModelObject::bounding_box() const
         for (size_t i = 0; i < instances.size(); ++i)
             m_bounding_box.merge(instance_bounding_box(i, false));
     }
+    if (m_bounding_box.min.z() != 0) {
+        std::cout << "bad\n";
+    }
+    std::cout << "get bouding box " << this->m_belted_rotation << " : min=" << m_bounding_box.min.z() << " : max=" << m_bounding_box.max.z() << "\n";
     return m_bounding_box;
 }
 
@@ -990,6 +994,10 @@ const BoundingBoxf3& ModelObject::raw_mesh_bounding_box() const
         for (const ModelVolume *v : this->volumes)
             if (v->is_model_part())
                 m_raw_mesh_bounding_box.merge(v->mesh().transformed_bounding_box(inst_matrix * v->get_matrix()));
+        if (m_raw_mesh_bounding_box.min.z() < 0) {
+            m_raw_mesh_bounding_box.max.z() -= m_raw_mesh_bounding_box.min.z();
+            m_raw_mesh_bounding_box.min.z() = 0;
+        }
     }
     return m_raw_mesh_bounding_box;
 }
@@ -1004,6 +1012,11 @@ BoundingBoxf3 ModelObject::full_raw_mesh_bounding_box() const
     }
 	for (const ModelVolume *v : this->volumes)
 		bb.merge(v->mesh().transformed_bounding_box(inst_matrix * v->get_matrix()));
+    if (bb.min.z() < 0) {
+        bb.max.z() -= bb.min.z();
+        bb.min.z() = 0;
+    }
+    std::cout << "get full_raw_mesh_bounding_box " << this->m_belted_rotation << " : min=" << bb.min.z() << " : max=" << bb.max.z() << "\n";
 	return bb;
 }
 
@@ -1026,8 +1039,28 @@ const BoundingBoxf3& ModelObject::raw_bounding_box() const
             if (v->is_model_part())
                 m_raw_bounding_box.merge(v->mesh().transformed_bounding_box(inst_matrix * v->get_matrix()));
         }
+        if (m_raw_bounding_box.min.z() < 0) {
+            m_raw_bounding_box.max.z() -= m_raw_bounding_box.min.z();
+            m_raw_bounding_box.min.z() = 0;
+        }
     }
+    std::cout << "get raw bouding box " << this->m_belted_rotation << " : min=" << m_raw_bounding_box.min.z() << " : max=" << m_raw_bounding_box.max.z() << "\n";
 	return m_raw_bounding_box;
+}
+const BoundingBoxf3 ModelObject::raw_bounding_box(float radian_rotate) const {
+    BoundingBoxf3 bb;
+    if (this->instances.empty())
+        throw Slic3r::InvalidArgument("Can't call raw_bounding_box() with no instances");
+
+    Transform3d inst_matrix = this->instances.front()->get_transformation().get_matrix(true);
+    auto translate  = inst_matrix.translation();
+    inst_matrix.rotate(Eigen::Quaterniond(Eigen::AngleAxisd(radian_rotate, Vec3d::UnitX())));
+    for (const ModelVolume* v : this->volumes)
+    {
+        if (v->is_model_part())
+            bb.merge(v->mesh().transformed_bounding_box(inst_matrix * v->get_matrix()));
+    }
+    return bb;
 }
 
 // This returns an accurate snug bounding box of the transformed object instance, with or without the translation applied.
@@ -1047,6 +1080,12 @@ BoundingBoxf3 ModelObject::instance_bounding_box(const ModelInstance & instance,
         if (v->is_model_part())
             bb.merge(v->mesh().transformed_bounding_box(inst_matrix * v->get_matrix()));
     }
+    if (bb.min.z() < 0) {
+        bb.max.z() -= bb.min.z();
+        bb.min.z() = 0;
+    }
+    if (this->m_belted_rotation != 0)
+    std::cout << "get instance_bounding_box " << this->m_belted_rotation << " : min=" << m_raw_bounding_box.min.z() << " : max=" << m_raw_bounding_box.max.z() << "\n";
     return bb;
 }
 

@@ -126,6 +126,7 @@ public:
     bool                slicing_errors;
     coordf_t            slice_z;       // Z used for slicing in unscaled coordinates
     coordf_t            print_z;       // Z used for printing in unscaled coordinates
+    coordf_t            supported_y = std::numeric_limits<coordf_t>::max();   // each point with higher Y than that is supported by the bed (because there is an angle, belted printer)
     coordf_t            height;        // layer height in unscaled coordinates
     coordf_t            bottom_z() const { return this->print_z - this->height; }
 

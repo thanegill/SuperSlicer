@@ -111,6 +111,8 @@ private:
     // current lift, to remove from m_pos to have the current height.
     double          m_lifted;
     Vec3d           m_pos = Vec3d::Zero();
+    //cache for tilt
+    float           m_costilt=0, m_sintilt=0, m_cos_div_sin_tilt;
 
     std::string _travel_to_z(double z, const std::string &comment);
     std::string _retract(double length, double restart_extra, double restart_extra_toolchange, const std::string &comment);
