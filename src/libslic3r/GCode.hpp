@@ -247,7 +247,7 @@ private:
     void            _init_multiextruders(Print& print, GCodeOutputStream& file, GCodeWriter& writer, ToolOrdering& tool_ordering, const std::string& custom_gcode);
 
     std::vector<LayerToPrint>        		                   collect_layers_to_print(const PrintObject &object);
-    std::vector<std::pair<coordf_t, std::vector<LayerToPrint>>> collect_layers_to_print(const PrintObjectPtrs &print_objects);
+    std::vector<std::pair<coordf_t, std::vector<LayerToPrint>>> collect_layers_to_print(const Print &print);
 
     LayerResult process_layer(
         const Print                     &print,
@@ -531,7 +531,7 @@ private:
     friend class PressureEqualizer;
 };
 
-std::vector<const PrintInstance*> sort_object_instances_by_model_order(const Print& print, const PrintObjectPtrs& print_objects);
+std::vector<const PrintInstance*> sort_object_instances_by_model_order(const Print& print);
 
 }
 

@@ -1756,7 +1756,7 @@ void SeamPlacer::place_seam(const Layer *layer, ExtrusionLoop &loop, const uint1
     using namespace SeamPlacerImpl;
     const PrintObject *po = layer->object();
     // Must not be called with supprot layer.
-    assert(dynamic_cast<const SupportLayer*>(layer) == nullptr);
+    assert(dynamic_cast<const SupportLayer*>(layer) == nullptr || (dynamic_cast<const StubLayer*>(layer) != nullptr && !dynamic_cast<const StubLayer*>(layer)->is_support()));
     // Object layer IDs are incremented by the number of raft layers.
     assert(layer->id() >= po->slicing_parameters().raft_layers());
     const size_t layer_index = layer->id() - po->slicing_parameters().raft_layers();

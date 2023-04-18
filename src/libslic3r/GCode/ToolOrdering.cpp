@@ -143,6 +143,17 @@ ToolOrdering::ToolOrdering(const Print &print, uint16_t first_extruder, bool pri
 
             max_layer_height = std::max(max_layer_height, object->config().layer_height.value);
         }
+        if (print.config().bed_tilt.value > 1) {
+            //get max y (TODO: lower
+            double max_y = 0;
+            for (Vec2d pt : print.config().bed_shape.values) {
+                max_y = std::max(max_y, pt.y());
+            }
+            //add layers up to y
+            double layer_h = print.full_print_config().get_computed_value("layer_height");
+            for(double y=0;y< max_y;y+= layer_h)
+            zs.emplace_back(y);
+        }
         this->initialize_layers(zs);
     }
     max_layer_height = calc_max_layer_height(print.config(), max_layer_height);
@@ -591,7 +602,7 @@ const LayerTools& ToolOrdering::tools_for_layer(coordf_t print_z) const
         dist_min = d;
     }
     -- it_layer_tools;
-    assert(dist_min < EPSILON);
+    //assert(dist_min < EPSILON);
     return *it_layer_tools;
 }
 

@@ -242,13 +242,17 @@ public:
         layer_ranges.clear();
         cached_volume_ids.clear();
     }
-
+    virtual ~PrintObjectRegions() {
+        std::cout << "del" << "\n";
+    }
 private:
     friend class PrintObject;
     // Number of PrintObjects generated from the same ModelObject and sharing the regions.
     // ref_cnt could only be modified by the main thread, thus it does not need to be atomic.
     size_t                                      m_ref_cnt{ 0 };
 };
+
+class PrintObjectStub;
 
 class PrintObject : public PrintObjectBaseWithState<Print, PrintObjectStep, posCount>
 {
@@ -355,14 +359,12 @@ public:
     const ExtrusionEntityCollection& skirt() const { return m_skirt; }
     const ExtrusionEntityCollection& brim() const { return m_brim; }
 
-    //for tilted bed, we need to create a PrintObject per instance.
-    std::shared_ptr<PrintObject> create_from_instance(size_t instance_idx);
 protected:
     // to be called from Print only.
     friend class Print;
 
 	PrintObject(Print* print, ModelObject* model_object, const Transform3d& trafo, PrintInstances&& instances);
-	~PrintObject() { if (m_shared_regions && -- m_shared_regions->m_ref_cnt == 0) delete m_shared_regions; }
+    ~PrintObject() { if (m_shared_regions && --m_shared_regions->m_ref_cnt == 0) delete m_shared_regions; }
  
     void                    config_apply(const ConfigBase &other, bool ignore_nonexistent = false) { m_config.apply(other, ignore_nonexistent); }
     void                    config_apply_only(const ConfigBase &other, const t_config_option_keys &keys, bool ignore_nonexistent = false) { m_config.apply_only(other, keys, ignore_nonexistent); }
@@ -381,6 +383,9 @@ protected:
     static PrintObjectConfig object_config_from_model_object(const PrintObjectConfig &default_object_config, const ModelObject &object, size_t num_extruders);
 
 private:
+    friend class PrintObjectStub;
+    PrintObject(Print* print, ModelObject* model_object, const Transform3d& trafo);
+
     void make_perimeters();
     void prepare_infill();
     void infill();
@@ -438,6 +443,15 @@ private:
     bool                                    m_typed_slices = false;
 
 
+};
+
+class PrintObjectStub : public PrintObject {
+public:
+    //for tilted bed, we need to create a PrintObject per instance.
+    PrintObjectStub(const PrintObject* object, const PrintInstance& instance);
+    virtual ~PrintObjectStub() { m_shared_regions = nullptr; /*don't destroy m_shared_regions, it's not mine*/ }
+    static PrintObjectStub* create_from_instance(const PrintObject* object, size_t instance_idx);
+    inline void set_front_instance_y_for_bed_tilt(coord_t new_y) { m_instances.front().shift.y() = new_y; }
 };
 
 struct WipeTowerData
@@ -561,7 +575,8 @@ private: // Prevents erroneous use by other classes.
 
 public:
     //Print() = default;
-    Print() {
+    Print() : m_objects_temp_gcode() {
+        assert(m_objects_temp_gcode.use_count() == 0);
         //create config hierachy
         m_default_object_config.parent = &m_config;
         m_default_region_config.parent = &m_default_object_config;
@@ -617,16 +632,17 @@ public:
     const PrintConfig&          config() const { return m_config; }
     const PrintObjectConfig&    default_object_config() const { return m_default_object_config; }
     const PrintRegionConfig&    default_region_config() const { return m_default_region_config; }
-    ConstPrintObjectPtrsAdaptor objects() const { return ConstPrintObjectPtrsAdaptor(&m_objects); }
-    PrintObject*                get_object(size_t idx) { return const_cast<PrintObject*>(m_objects[idx]); }
-    const PrintObject*          get_object(size_t idx) const { return m_objects[idx]; }
+    ConstPrintObjectPtrsAdaptor Print::objects() const {
+        if (auto ptr = m_objects_temp_gcode.lock(); !ptr)
+            return ConstPrintObjectPtrsAdaptor(&m_objects);
+        else 
+            return ConstPrintObjectPtrsAdaptor(&*ptr);
+    }
+    PrintObject*                get_object(size_t idx);
+    const PrintObject*          get_object(size_t idx) const;
     // PrintObject by its ObjectID, to be used to uniquely bind slicing warnings to their source PrintObjects
     // in the notification center.
-    const PrintObject*          get_object(ObjectID object_id) const { 
-        auto it = std::find_if(m_objects.begin(), m_objects.end(), 
-            [object_id](const PrintObject *obj) { return obj->id() == object_id; });
-        return (it == m_objects.end()) ? nullptr : *it;
-    }
+    const PrintObject*          get_object(ObjectID object_id) const;
     // How many of PrintObject::copies() over all print objects are there?
     // If zero, then the print is empty and the print shall not be executed.
     uint16_t                    num_object_instances() const;
@@ -672,6 +688,11 @@ public:
     // Invalidates the step, and its depending steps in Print.
     //in public to invalidate gcode when the physical printer change. It's needed if we allow the gcode macro to read these values.
     bool                invalidate_step(PrintStep step);
+
+    //note: not all uses of m_objects are changed to also take that, as it's a gcode-only thing.
+    inline void set_temp_gcode_objects(std::shared_ptr<PrintObjectPtrs> ptrs) {
+        m_objects_temp_gcode = std::weak_ptr<PrintObjectPtrs>{ ptrs };
+    }
 protected:
 private:
 
@@ -688,6 +709,7 @@ private:
     PrintObjectConfig                       m_default_object_config;
     PrintRegionConfig                       m_default_region_config;
     PrintObjectPtrs                         m_objects;
+    std::weak_ptr<PrintObjectPtrs>          m_objects_temp_gcode;
     PrintRegionPtrs                         m_print_regions;
 
     // Ordered collections of extrusion paths to build skirt loops and brim.
@@ -715,6 +737,18 @@ private:
     friend class GCode;
     // Allow PrintObject to access m_mutex and m_cancel_callback.
     friend class PrintObject;
+    //allow PrintStub to copy members
+    friend class PrintStub;
+};
+
+//like a print, but with a different set of objects & layers
+//for bel tilt
+class PrintStub : public Print {
+public:
+    // PrintStub take ownership of objects
+    PrintStub(const Print& print, PrintObjectPtrs& objects);
+    ~PrintStub();
+    void                reset_tool_ordering();
 };
 
 //for testing purpose (in printobject)

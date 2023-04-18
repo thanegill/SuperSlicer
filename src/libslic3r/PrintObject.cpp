@@ -94,14 +94,33 @@ namespace Slic3r {
         m_config.parent = &print->config();
     }
 
-    std::shared_ptr<PrintObject> PrintObject::create_from_instance(size_t instance_idx) {
-        assert(instance_idx < m_instances.size());
-        std::shared_ptr<PrintObject> out;
-        out.reset(new PrintObject{*this});
-        out->m_instances.clear();
-        out->m_instances.push_back(this->m_instances[instance_idx]);
-        //TODO: maybe remove brim/skirt? they should be deactivated anyway in a tilted thing...
-        return out;
+    //constructor for stub
+
+    PrintObject::PrintObject(Print* print, ModelObject* model_object, const Transform3d& trafo) :
+        PrintObjectBaseWithState(print, model_object),
+        m_trafo(trafo)
+    {}
+
+    PrintObjectStub::PrintObjectStub(const PrintObject* object, const PrintInstance& instance) 
+        : PrintObject(object->m_print, object->m_model_object, object->m_trafo) {
+
+        this->m_size = object->m_size;
+        this->m_instances.push_back(instance);
+        this->m_instances.back().print_object = this;
+        this->m_config = object->m_config;
+        this->m_center_offset = object->m_center_offset;
+        this->m_zcenter_offset = object->m_zcenter_offset; //for bed tilt, to compensate for rotation (need to push it up)
+        this->m_shared_regions = object->m_shared_regions; // it's something owned (a   nd so deleted) by the original PrintObject
+        this->m_layers = object->m_layers;
+        this->m_support_layers = object->m_support_layers;
+        //m_skirt_first_layer;
+        //m_skirt;
+        //m_brim;
+        m_slicing_params = object->m_slicing_params;
+    }
+    PrintObjectStub* PrintObjectStub::create_from_instance(const PrintObject* object, size_t instance_idx) {
+        assert(instance_idx < object->m_instances.size());
+        return new PrintObjectStub{ object, object->m_instances[instance_idx] };
     }
 
     PrintBase::ApplyStatus PrintObject::set_instances(PrintInstances&& instances)

@@ -11,6 +11,40 @@
 
 namespace Slic3r {
 
+
+//std::shared_ptr<StubLayer> StubLayer::create(double dz) {
+//    std::shared_ptr<StubLayer> out = std::shared_ptr<StubLayer>(new Layer(m_id, m_object, height, print_z + dz, slice_z + dz));
+//    return out;
+//}
+StubLayer::StubLayer(Layer* layer, size_t interface_id, double dz, PrintObject* object)
+: SupportLayer(layer->id(), interface_id, object, layer->height, layer->print_z + dz, layer->slice_z + dz) {
+    //the region layer() is wrong, but nothing use it in gcode.cpp
+    this->m_regions = layer->m_regions; 
+
+
+        //for (LayerRegion* reg : layer->m_regions) {
+        //    this->m_regions.push_back(new LayerRegion(this, &reg->region()));
+        //    this->m_regions.back()->m_slices = reg->m_slices;
+        //    this->m_regions.back()->raw_slices = reg->raw_slices;
+        //    this->m_regions.back()->thin_fills = reg->thin_fills;
+        //    this->m_regions.back()->fill_expolygons = reg->fill_expolygons;
+        //    this->m_regions.back()->fill_no_overlap_expolygons = reg->fill_no_overlap_expolygons;
+        //    this->m_regions.back()->fill_surfaces = reg->fill_surfaces;
+        //    this->m_regions.back()->unsupported_bridge_edges = reg->unsupported_bridge_edges;
+        //    this->m_regions.back()->perimeters = reg->perimeters;
+        //    this->m_regions.back()->milling = reg->milling;
+        //    this->m_regions.back()->fills = reg->fills;
+        //    this->m_regions.back()->ironings = reg->ironings;
+        //}
+}
+
+StubLayer::~StubLayer()
+{
+    //don't delete regions 
+    m_regions.clear();
+}
+
+
 Layer::~Layer()
 {
     this->lower_layer = this->upper_layer = nullptr;

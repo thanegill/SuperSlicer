@@ -686,7 +686,7 @@ std::vector<GCode::LayerToPrint> GCode::collect_layers_to_print(const PrintObjec
 // Prepare for non-sequential printing of multiple objects: Support resp. object layers with nearly identical print_z
 // will be printed for  all objects at once.
 // Return a list of <print_z, per object LayerToPrint> items.
-std::vector<std::pair<coordf_t, std::vector<GCode::LayerToPrint>>> GCode::collect_layers_to_print(const PrintObjectPtrs& print_objects)
+std::vector<std::pair<coordf_t, std::vector<GCode::LayerToPrint>>> GCode::collect_layers_to_print(const Print& print)
 {
     struct OrderingItem {
         coordf_t    print_z;
@@ -694,10 +694,10 @@ std::vector<std::pair<coordf_t, std::vector<GCode::LayerToPrint>>> GCode::collec
         size_t      layer_idx;
     };
 
-    std::vector<std::vector<LayerToPrint>>  per_object(print_objects.size(), std::vector<LayerToPrint>());
+    std::vector<std::vector<LayerToPrint>>  per_object(print.objects().size(), std::vector<LayerToPrint>());
     std::vector<OrderingItem>               ordering;
-    for (size_t i = 0; i < print_objects.size(); ++i) {
-        per_object[i] = collect_layers_to_print(*print_objects[i]);
+    for (size_t i = 0; i < print.objects().size(); ++i) {
+        per_object[i] = collect_layers_to_print(*print.objects()[i]);
         OrderingItem ordering_item;
         ordering_item.object_idx = i;
         ordering.reserve(ordering.size() + per_object[i].size());
@@ -723,7 +723,7 @@ std::vector<std::pair<coordf_t, std::vector<GCode::LayerToPrint>>> GCode::collec
         std::pair<coordf_t, std::vector<LayerToPrint>> merged;
         // Assign an average print_z to the set of layers with nearly equal print_z.
         merged.first = 0.5 * (ordering[i].print_z + ordering[j - 1].print_z);
-        merged.second.assign(print_objects.size(), LayerToPrint());
+        merged.second.assign(print.objects().size(), LayerToPrint());
         for (; i < j; ++ i) {
             const OrderingItem& oi = ordering[i];
             assert(merged.second[oi.object_idx].layer() == nullptr);
@@ -1059,12 +1059,12 @@ namespace DoExport {
         processor.enable_stealth_time_estimator(silent_time_estimator_enabled);
     }
 
-	static double autospeed_volumetric_limit(const Print &print, const PrintObjectPtrs &print_objects)
+	static double autospeed_volumetric_limit(const Print &print)
 	{
         ExtrusionMinMM compute_min_mm3_per_mm{ &print.full_print_config() };
 	    // get the minimum cross-section used in the print
 	    std::vector<double> mm3_per_mm;
-	    for (auto object : print_objects) {
+	    for (auto object : print.objects()) {
 	        for (size_t region_id = 0; region_id < object->num_printing_regions(); ++ region_id) {
 	            const PrintRegion &region = object->printing_region(region_id);
 	            for (auto layer : object->layers()) {
@@ -1214,9 +1214,9 @@ namespace DoExport {
 
 
 // Sort the PrintObjects by their increasing Z, likely useful for avoiding colisions on Deltas during sequential prints.
-static inline std::vector<const PrintInstance*> sort_object_instances_by_max_z(const PrintObjectPtrs& print_objects)
+static inline std::vector<const PrintInstance*> sort_object_instances_by_max_z(const Print& print)
 {
-    std::vector<const PrintObject*> objects(print_objects.begin(), print_objects.end());
+    std::vector<const PrintObject*> objects(print.objects().begin(), print.objects().end());
     std::sort(objects.begin(), objects.end(), [](const PrintObject* po1, const PrintObject* po2) { return po1->height() < po2->height(); });
     std::vector<const PrintInstance*> instances;
     instances.reserve(objects.size());
@@ -1228,9 +1228,9 @@ static inline std::vector<const PrintInstance*> sort_object_instances_by_max_z(c
 
 
 // Sort the PrintObjects by their increasing Y, likely useful for avoiding colisions on printer with a x-bar during sequential prints.
-static inline std::vector<const PrintInstance*> sort_object_instances_by_max_y(const PrintObjectPtrs& print_objects)
+static inline std::vector<const PrintInstance*> sort_object_instances_by_max_y(const Print& print)
 {
-    std::vector<const PrintObject*> objects(print_objects.begin(), print_objects.end());
+    std::vector<const PrintObject*> objects(print.objects().begin(), print.objects().end());
     std::sort(objects.begin(), objects.end(), [](const PrintObject* po1, const PrintObject* po2) { return po1->height() < po2->height(); });
     std::vector<const PrintInstance*> instances;
     instances.reserve(objects.size());
@@ -1257,12 +1257,12 @@ static inline std::vector<const PrintInstance*> sort_object_instances_by_max_y(c
 }
 
 // Produce a vector of PrintObjects in the order of their respective ModelObjects in print.model().
-std::vector<const PrintInstance*> sort_object_instances_by_model_order(const Print& print, const PrintObjectPtrs& print_objects)
+std::vector<const PrintInstance*> sort_object_instances_by_model_order(const Print& print)
 {
     // Build up map from ModelInstance* to PrintInstance*
     std::vector<std::pair<const ModelInstance*, const PrintInstance*>> model_instance_to_print_instance;
     model_instance_to_print_instance.reserve(print.num_object_instances());
-    for (const PrintObject *print_object : print_objects)
+    for (const PrintObject *print_object : print.objects())
         for (const PrintInstance &print_instance : print_object->instances())
             model_instance_to_print_instance.emplace_back(print_instance.model_instance, &print_instance);
     std::sort(model_instance_to_print_instance.begin(), model_instance_to_print_instance.end(), [](auto &l, auto &r) { return l.first < r.first; });
@@ -1298,27 +1298,66 @@ void GCode::_init_multiextruders(Print& print, GCodeOutputStream& file, GCodeWri
     }
 }
 
-void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGeneratorCallback thumbnail_cb)
+void GCode::_do_export(Print& print_init, GCodeOutputStream &file, ThumbnailsGeneratorCallback thumbnail_cb)
 {
     PROFILE_FUNC();
 
     //apply print config to m_config and m_writer, so we don't have to use print.config() instead
     // (and mostly to make m_writer.preamble() works)
-    this->apply_print_config(print.config());
+    this->apply_print_config(print_init.config());
 
     //if bed tilt, make each instance it own object, to simplify the layers creation.
-    std::vector<std::shared_ptr<PrintObject>> new_print_objects;
-    PrintObjectPtrs print_objects;
-    for (PrintObject* print_object : print.objects()) {
-        new_print_objects.push_back(print_object->create_from_instance(0));
-        print_objects.push_back(new_print_objects.back().get());
-        if (print_object->instances().size() > 1) {
-            for (int i = 1; i < print_object->instances().size(); ++i) {
-                new_print_objects.push_back(print_object->create_from_instance(i));
-                print_objects.push_back(new_print_objects.back().get());
+    std::map<PrintObject*, std::vector<PrintObjectStub*>> new_print_objects;// objects will be stored inside the print sub, and will be deleted inside it.
+    std::vector<std::shared_ptr<StubLayer>> new_layers; // to store new layers, and delete them automatically when gcode is done.
+    std::shared_ptr<PrintStub> print_stub_tilt;
+    double m_cos_div_sin_tilt = 1; //45°
+    //PrintStub* print_stub_tilt;
+    std::shared_ptr<PrintObjectPtrs> print_objects = std::make_shared<PrintObjectPtrs>(); //TODO: const-it
+    Print* print_ptr = &print_init;
+    if (print_init.config().bed_tilt > 1) {
+        for (PrintObject* print_object : print_init.objects()) {
+            std::vector<PrintObjectStub*> &my_new_objects = new_print_objects[print_object];
+            my_new_objects.push_back(PrintObjectStub::create_from_instance(print_object, 0));
+            print_objects->push_back(my_new_objects.back());
+            if (print_object->instances().size() > 1) {
+                for (int i = 1; i < print_object->instances().size(); ++i) {
+                    my_new_objects.push_back(PrintObjectStub::create_from_instance(print_object, i));
+                    print_objects->push_back(my_new_objects.back());
+                }
             }
         }
+        //for each instance, change layers to move them up in z from their y-offset
+        //also move them in y from their z position
+        float sintilt = (float)std::sin(Geometry::deg2rad(print_init.config().bed_tilt.value));
+        float costilt = (float)std::cos(Geometry::deg2rad(print_init.config().bed_tilt.value));
+        float cos_div_sin_tilt = costilt / sintilt;
+        //FIXME: make this works even with multiple objects & instances
+        for (auto& print_objects : new_print_objects) {
+            for (PrintObjectStub* print_object : print_objects.second) {
+                assert(print_object->instances().size() == 1);
+                Point old_shift = print_object->instances().front().shift;
+                double z_offset = unscaled(old_shift.y());
+                print_object->set_front_instance_y_for_bed_tilt(coord_t(old_shift.y() * m_cos_div_sin_tilt));
+                for (size_t i = 0; i < print_object->layers().size(); ++i) {
+                    Layer* layer = print_object->layers()[i];
+                    std::shared_ptr<StubLayer> ptr(new StubLayer(layer, 0, z_offset, print_object));
+                    new_layers.push_back(ptr);
+                    print_object->layers()[i] = ptr.get();
+                }
+                for (size_t i = 0; i < print_object->support_layers().size(); ++i) {
+                    SupportLayer* layer = print_object->support_layers()[i];
+                    std::shared_ptr<StubLayer> ptr(new StubLayer(layer, layer->interface_id(), z_offset, print_object));
+                    new_layers.push_back(ptr);
+                    print_object->support_layers()[i] = ptr.get();
+                }
+            }
+        }
+        //create a print stub
+        print_stub_tilt.reset(new PrintStub{ print_init, *print_objects });
+        print_stub_tilt->reset_tool_ordering();
+        //print_stub_tilt = new PrintStub{ print_init, *print_objects };
     }
+    Print& print = print_stub_tilt? *print_stub_tilt : print_init;
 
     // modifies m_silent_time_estimator_enabled
     DoExport::init_gcode_processor(print.config(), m_processor, m_silent_time_estimator_enabled);
@@ -1352,7 +1391,7 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
     m_layer_count = 0;
     if (print.config().complete_objects.value) {
         // Add each of the object's layers separately.
-        for (auto object : print_objects) {
+        for (auto object : print.objects()) {
             std::vector<coordf_t> zs;
             zs.reserve(object->layers().size() + object->support_layers().size());
             for (auto layer : object->layers())
@@ -1365,7 +1404,7 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
     } else {
         // Print all objects with the same print_z together.
         std::vector<coordf_t> zs;
-        for (auto object : print_objects) {
+        for (auto object : print.objects()) {
             zs.reserve(zs.size() + object->layers().size() + object->support_layers().size());
             for (auto layer : object->layers())
                 zs.push_back(layer->print_z);
@@ -1382,7 +1421,7 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
 
     m_enable_cooling_markers = true;
 
-    m_volumetric_speed = DoExport::autospeed_volumetric_limit(print, print_objects);
+    m_volumetric_speed = DoExport::autospeed_volumetric_limit(print);
     print.throw_if_canceled();
 
     if (print.config().spiral_vase.value)
@@ -1428,7 +1467,7 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
     print.throw_if_canceled();
 
     // Write some terse information on the slicing parameters.
-    const PrintObject *first_object         = print_objects.front();
+    const PrintObject *first_object         = print.objects().front();
     const double       layer_height         = first_object->config().layer_height.value;
 
     const double       first_layer_height   = print.get_first_layer_height();
@@ -1448,7 +1487,7 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
     }
     BoundingBoxf3 global_bounding_box;
     size_t nb_items = 0;
-    for (PrintObject *print_object : print_objects) {
+    for (PrintObject *print_object : print.objects()) {
         this->m_ordered_objects.push_back(print_object);
         uint32_t copy_id = 0;
         for (const PrintInstance &print_instance : print_object->instances()) {
@@ -1533,7 +1572,7 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
     std::vector<const PrintInstance*>::const_iterator 	print_object_instance_sequential_active;
     bool has_milling = false;
     if (!config().milling_diameter.values.empty()) {
-        for (const PrintObject* obj : print_objects) {
+        for (const PrintObject* obj : print.objects()) {
             for (const Layer *layer : obj->layers()) {
                 for (const LayerRegion *lr : layer->regions()) {
                     if (!lr->milling.empty()) {
@@ -1547,11 +1586,11 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
     if (print.config().complete_objects.value) {
         // Order object instances for sequential print.
         if(print.config().complete_objects_sort.value == cosObject)
-            print_object_instances_ordering = sort_object_instances_by_model_order(print, print_objects);
+            print_object_instances_ordering = sort_object_instances_by_model_order(print);
         else if (print.config().complete_objects_sort.value == cosZ)
-            print_object_instances_ordering = sort_object_instances_by_max_z(print_objects);
+            print_object_instances_ordering = sort_object_instances_by_max_z(print);
         else if (print.config().complete_objects_sort.value == cosY)
-            print_object_instances_ordering = sort_object_instances_by_max_y(print_objects);
+            print_object_instances_ordering = sort_object_instances_by_max_y(print);
         // Find the 1st printing object, find its tool ordering and the initial extruder ID.
         print_object_instance_sequential_active = print_object_instances_ordering.begin();
         for (; print_object_instance_sequential_active != print_object_instances_ordering.end(); ++ print_object_instance_sequential_active) {
@@ -1678,7 +1717,7 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
             print.skirt().visit(bbvisitor);
         } else {
             print.brim().visit(bbvisitor);
-            for (const PrintObject* po : print_objects) {
+            for (const PrintObject* po : print.objects()) {
                 for (const PrintInstance& inst : po->instances()) {
                     bbvisitor.offset = inst.shift;
                     if (po->skirt_first_layer().has_value()) {
@@ -1899,7 +1938,7 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
         } else {
             // Sort layers by Z.
             // All extrusion moves with the same top layer height are extruded uninterrupted.
-            std::vector<std::pair<coordf_t, std::vector<LayerToPrint>>> layers_to_print = collect_layers_to_print(print_objects);
+            std::vector<std::pair<coordf_t, std::vector<LayerToPrint>>> layers_to_print = collect_layers_to_print(print);
             // Prusa Multi-Material wipe tower.
             if (has_wipe_tower && ! layers_to_print.empty()) {
                 m_wipe_tower.reset(new WipeTowerIntegration(print.config(), *print.wipe_tower_data().priming.get(), print.wipe_tower_data().tool_changes, *print.wipe_tower_data().final_purge.get()));
@@ -1909,7 +1948,7 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
                     // Verify, whether the print overaps the priming extrusions.
                     BoundingBoxf bbox_print(get_print_extrusions_extents(print));
                     coordf_t twolayers_printz = ((layers_to_print.size() == 1) ? layers_to_print.front() : layers_to_print[1]).first + EPSILON;
-                    for (const PrintObject *print_object : print_objects)
+                    for (const PrintObject *print_object : print.objects())
                         bbox_print.merge(get_print_object_extrusions_extents(*print_object, twolayers_printz));
                     bbox_print.merge(get_wipe_tower_extrusions_extents(print, twolayers_printz));
                     BoundingBoxf bbox_prime(get_wipe_tower_priming_extrusions_extents(print));
@@ -2046,7 +2085,6 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
             [&print]() { print.throw_if_canceled(); });
     }
     print.throw_if_canceled();
-
 }
 
 // For unknown reasons and in sporadic cases when GCode export is processing, some participating thread
