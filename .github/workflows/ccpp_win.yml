@@ -13,7 +13,6 @@ jobs:
   test_gettext:
     runs-on: windows-2019
     steps:
-      run: mkdir build
     - name: copy gettext
       working-directory: ./build
       shell: powershell
