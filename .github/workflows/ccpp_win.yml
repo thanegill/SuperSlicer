@@ -29,6 +29,11 @@ jobs:
     - name: msgfmt
       working-directory: ./build
       run: msgfmt --version
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1.0.0
+      with:
+        name: msgfmt
+        path: build
 
   build_dep:
     runs-on: windows-2019
