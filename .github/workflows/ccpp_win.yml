@@ -41,19 +41,28 @@ jobs:
     - name: change date in version
       shell: powershell
       run: (Get-Content version.inc) | Foreach-Object {$_ -replace "\+UNKNOWN", ("_" + [datetime]::Today.ToString("yyyy-MM-dd"))} | Set-Content version.inc
-    - name: mkdir in deps directory
-      run: mkdir deps/destdir
+    - run: mkdir deps/destdir
     - name: download deps
       uses: actions/download-artifact@v1
       with:
         name: deps_win
         path: deps/destdir
-    - name: echo dir deps
-      run: dir deps
-    - name: echo dir deps destdir
-      run: dir deps/destdir
-    - name: mkdir
-      run: mkdir build
+    - run: dir deps
+    - run: dir deps/destdir
+    - run: mkdir msgfmt_bin
+    - name: copy gettext
+      working-directory: ./msgfmt_bin
+      shell: powershell
+      run: '(new-object System.Net.WebClient).DownloadFile("https://github.com/supermerill/SuperSlicer_deps/releases/download/gettext/gettext-tools-static-0.18.1.1.zip", "gettext.zip")'
+    - name: unzip
+      working-directory: ./msgfmt_bin
+      shell: cmd
+      run: '"C:/Program Files/7-Zip/7z.exe" x gettext.zip'
+    - name: add msgfmt to path
+      shell: powershell
+      working-directory: msgfmt_bin
+      run: echo "$pwd;" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+    - run: mkdir build
     - name: cmake
       working-directory: ./build
       run: cmake .. -G "Visual Studio 16 2019" -A x64 -DCMAKE_PREFIX_PATH="d:\a\${{ github.event.repository.name }}\${{ github.event.repository.name }}\deps\destdir\usr\local"
