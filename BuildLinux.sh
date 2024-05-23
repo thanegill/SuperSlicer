@@ -4,6 +4,7 @@ export ROOT=`pwd`
 export NCORES=`nproc --all`
 FOUND_GTK2=$(dpkg -l libgtk* | grep gtk2)
 FOUND_GTK3=$(dpkg -l libgtk* | grep gtk-3)
+FOUND_GTK4=$(dpkg -l libgtk* | grep gtk-4)
 
 unset name
 while getopts ":dsiuhgb" opt; do
@@ -25,10 +26,16 @@ while getopts ":dsiuhgb" opt; do
         ;;
     g )
         FOUND_GTK3=""
+        FOUND_GTK4=""
+        ;;
+    G )
+        FOUND_GTK2=""
+        FOUND_GTK3=""
         ;;
     h ) echo "Usage: ./BuildLinux.sh [-i][-u][-d][-s][-b][-g]"
         echo "   -i: Generate appimage (optional)"
         echo "   -g: force gtk2 build"
+        echo "   -G: force gtk4 build"
         echo "   -b: build in debug mode"
         echo "   -d: build deps (optional)"
         echo "   -s: build slic3r (optional)"
@@ -54,12 +61,18 @@ then
     exit 0
 fi
 
-# mkdir build
-if [ ! -d "build" ]
+if [[ -n "$FOUND_GTK2" ]]
 then
-    mkdir build
+    echo "Found GTK2"
 fi
-
+if [[ -n "$FOUND_GTK3" ]]
+then
+    echo "Found GTK3"
+fi
+if [[ -n "$FOUND_GTK4" ]]
+then
+    echo "Found GTK4"
+fi
 
 if [[ -n "$UPDATE_LIB" ]]
 then
@@ -92,15 +105,24 @@ fi
 
 FOUND_GTK2_DEV=$(dpkg -l libgtk* | grep gtk2.0-dev)
 FOUND_GTK3_DEV=$(dpkg -l libgtk* | grep gtk-3-dev)
-echo "FOUND_GTK2=$FOUND_GTK2)"
+FOUND_GTK4_DEV=$(dpkg -l libgtk* | grep gtk-4-dev)
 if [[ -z "$FOUND_GTK2_DEV" ]]
 then
 if [[ -z "$FOUND_GTK3_DEV" ]]
+then
+if [[ -z "$FOUND_GTK4_DEV" ]]
 then
     echo "Error, you must install the dependencies before."
     echo "Use option -u with sudo"
     exit 0
 fi
+fi
+fi
+
+# mkdir build
+if [ ! -d "build" ]
+then
+    mkdir build
 fi
 
 echo "[1/9] Updating submodules..."
