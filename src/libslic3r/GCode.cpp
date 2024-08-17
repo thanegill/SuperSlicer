@@ -1539,7 +1539,9 @@ void GCodeGenerator::_do_export(Print& print_mod, GCodeOutputStream &file, Thumb
         // Order object instances using a nearest neighbor search.
         print_object_instances_ordering = chain_print_object_instances(print);
         // prusaslicer replaced the previous m_layer_count set by `m_layer_count=tool_ordering.layer_tools().size()` here
-        assert(object_layer_count() == tool_ordering.layer_tools().size());
+        assert(object_layer_count() == tool_ordering.layer_tools().size() ||
+               m_layer_with_support_count == tool_ordering.layer_tools().size() ||
+               m_layer_with_support_count == tool_ordering.layer_tools().size() + 1);
     }
     if (initial_extruder_id == (uint16_t)-1) {
         // Nothing to print!
@@ -4670,6 +4672,7 @@ std::string GCodeGenerator::extrude_loop(const ExtrusionLoop &original_loop, con
     std::string gcode;
 
     coordf_t point_dist_for_vec = scale_t(m_config.seam_gap.get_abs_value(m_writer.tool()->id(), nozzle_diam)) / 2;
+    assert(point_dist_for_vec >= 0);
 
     // generate the unretracting/wipe start move (same thing than for the end, but on the other side)
     assert(!wipe_paths.empty() && wipe_paths.front().size() > 1 && !wipe_paths.back().empty());
@@ -6444,13 +6447,13 @@ std::string GCodeGenerator::_before_extrude(const ExtrusionPath &path, const std
             m_writer.set_travel_acceleration((uint32_t)floor(acceleration + 0.5));
             m_writer.set_acceleration((uint32_t)floor(acceleration + 0.5));
             // go to first point of extrusion path (stop at midpoint to let us set the decel speed)
-            if (!last_pos_defined() || last_pos() != path.first_point()) {
+            if (!last_pos_defined() || !last_pos().coincides_with_epsilon(path.first_point())) {
                 Polyline polyline = this->travel_to(gcode, path.first_point(), path.role());
                 this->write_travel_to(gcode, polyline, "move to first " + description + " point");
             }
         } else {
             // go to midpoint to let us set the decel speed)
-            if (!last_pos_defined() || last_pos() != path.first_point()) {
+            if (!last_pos_defined() || !last_pos().coincides_with_epsilon(path.first_point())) {
                 Polyline poly_start = this->travel_to(gcode, path.first_point(), path.role());
                 coordf_t length = poly_start.length();
                 // compute some numbers
@@ -6535,7 +6538,7 @@ std::string GCodeGenerator::_before_extrude(const ExtrusionPath &path, const std
             }
         }
     } else {
-        if (!last_pos_defined() || last_pos() != path.first_point()) {
+        if (!last_pos_defined() || !last_pos().coincides_with_epsilon(path.first_point())) {
             m_writer.set_travel_acceleration((uint32_t)floor(travel_acceleration + 0.5));
             Polyline polyline = this->travel_to(gcode, path.first_point(), path.role());
             this->write_travel_to(gcode, polyline, "move to first " + description + " point");
@@ -6734,6 +6737,7 @@ Polyline GCodeGenerator::travel_to(std::string &gcode, const Point &point, Extru
         This is expressed in print coordinates, so it will need to be translated by
         this->origin in order to get G-code coordinates.  */
     Polyline travel { this->last_pos(), point };
+    assert(!this->last_pos().coincides_with_epsilon(point));
 
     // check whether wipe could be disabled without causing visible stringing
     //not used anymore, not reliable
@@ -6756,6 +6760,10 @@ Polyline GCodeGenerator::travel_to(std::string &gcode, const Point &point, Extru
         // plan a multi-hop travel path inside the configuration space
         if (this->can_cross_perimeter(travel, true)) {
             this->m_throw_if_canceled();
+            travel = m_avoid_crossing_perimeters.travel_to(*this, point, &could_be_wipe_disabled);
+            assert(travel.size() > 1);
+            for (size_t i = 1; i < travel.size(); i++)
+                assert(!travel.points[i - 1].coincides_with_epsilon(travel.points[i]));
             travel = m_avoid_crossing_perimeters.travel_to(*this, point, &could_be_wipe_disabled);
         }
     }
@@ -6847,6 +6855,10 @@ Polyline GCodeGenerator::travel_to(std::string &gcode, const Point &point, Extru
         // Reset the wipe path when traveling, so one would not wipe along an old path.
         m_wipe.reset_path();
     }
+    assert(travel.size() > 1);
+    for (size_t i = 1; i < travel.size(); i++)
+        assert(!travel.points[i-1].coincides_with_epsilon(travel.points[i]));
+
     //if needed, write the gcode_label_objects_end then gcode_label_objects_start
     _add_object_change_labels(gcode);
 
@@ -6857,6 +6869,9 @@ Polyline GCodeGenerator::travel_to(std::string &gcode, const Point &point, Extru
             --i;
         }
     }
+    assert(travel.size() > 1);
+    for (size_t i = 1; i < travel.size(); i++)
+        assert(!travel.points[i-1].coincides_with_epsilon(travel.points[i]));
     
     this->m_throw_if_canceled();
     //if needed, remove points to avoid surcharging the printer.
