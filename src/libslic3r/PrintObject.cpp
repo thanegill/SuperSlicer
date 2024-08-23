@@ -229,8 +229,9 @@ void PrintObject::make_perimeters()
                     const coord_t ext_perimeter_width   = ext_perimeter_flow.scaled_width();
                     const coord_t ext_perimeter_spacing = ext_perimeter_flow.scaled_spacing();
 
-                    // slice is not const because slice.extra_perimeters is being incremented.
-                    for (Surface &slice : layerm.m_slices.surfaces) {
+                    // slice_mutable is not const because slice.extra_perimeters is being incremented.
+                    for (Surface &slice_mutable : layerm.m_slices.surfaces) {
+                        const Surface &slice = slice_mutable;
                         for (;;) {
                             // compute the total thickness of perimeters
                             const coord_t perimeters_thickness = ext_perimeter_width/2 + ext_perimeter_spacing/2
@@ -258,7 +259,7 @@ void PrintObject::make_perimeters()
                                 );
                             }
                             */
-                            ++ slice.extra_perimeters;
+                            ++ slice_mutable.extra_perimeters;
                         }
 #ifdef DEBUG
                             if (slice.extra_perimeters > 0)
@@ -1759,13 +1760,15 @@ void PrintObject::detect_surfaces_type()
             stPosBottom | stDensSolid :
             stPosBottom | stDensSolid | stModBridge;
         
+        coordf_t scaled_resolution = scale_d(print()->config().resolution.value);
+
         Slic3r::parallel_for(size_t(0), 
             spiral_vase ?
             		// In spiral vase mode, reserve the last layer for the top surface if more than 1 layer is planned for the vase bottom.
             		((num_layers > 1) ? num_layers - 1 : num_layers) :
             		// In non-spiral vase mode, go over all layers.
             		m_layers.size(),
-            [this, region_id, interface_shells, &surfaces_new, has_bridges, surface_type_bottom_other]
+            [this, region_id, interface_shells, &surfaces_new, has_bridges, surface_type_bottom_other, scaled_resolution]
                 (const size_t idx_layer) {
                     PRINT_OBJECT_TIME_LIMIT_MILLIS(PRINT_OBJECT_TIME_LIMIT_DEFAULT);
                     m_print->throw_if_canceled();
@@ -1876,6 +1879,7 @@ void PrintObject::detect_surfaces_type()
                     Surfaces  surfaces_backup;
                     if (! interface_shells) {
                         surfaces_backup = std::move(surfaces_out);
+                        for(auto &srf : surfaces_backup) srf.expolygon.assert_point_distance();
                         surfaces_out.clear();
                     }
                     //const Surfaces &surfaces_prev = interface_shells ? layerm_slices_surfaces : surfaces_backup;
@@ -1885,7 +1889,12 @@ void PrintObject::detect_surfaces_type()
                     {
                         Polygons topbottom = to_polygons(top);
                         polygons_append(topbottom, to_polygons(bottom));
-                        surfaces_append(surfaces_out, diff_ex(surfaces_prev_expolys, topbottom), stPosInternal | stDensSparse);
+                        for(auto &poly : topbottom) poly.assert_point_distance();
+                        for(auto &poly : surfaces_prev_expolys) poly.assert_point_distance();
+                        ExPolygons diff = diff_ex(surfaces_prev_expolys, topbottom);
+                        for(ExPolygon &expoly : diff)
+                            expoly.douglas_peucker(scaled_resolution);
+                        surfaces_append(surfaces_out, diff, stPosInternal | stDensSparse);
                     }
 
                     surfaces_append(surfaces_out, std::move(top));

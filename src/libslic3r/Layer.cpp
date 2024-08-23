@@ -570,11 +570,16 @@ void Layer::backup_untyped_slices()
 void Layer::restore_untyped_slices()
 {
     if (layer_needs_raw_backup(this)) {
-        for (LayerRegion *layerm : m_regions)
+        for (LayerRegion *layerm : m_regions) {
+            for(auto &poly : layerm->m_raw_slices) poly.assert_point_distance();
             layerm->m_slices.set(layerm->m_raw_slices, stPosInternal | stDensSparse);
+            for(auto &srf : layerm->m_slices) srf.expolygon.assert_point_distance();
+        }
     } else {
         assert(m_regions.size() == 1);
+        for(auto &poly : this->lslices) poly.assert_point_distance();
         m_regions.front()->m_slices.set(this->lslices, stPosInternal | stDensSparse);
+        for(auto &srf :  m_regions.front()->m_slices) srf.expolygon.assert_point_distance();
     }
 }
 

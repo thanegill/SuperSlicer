@@ -1105,7 +1105,7 @@ void make_brim(const Print& print, const Flow& flow, const PrintObjectPtrs& obje
         unbrimmable_polygons.push_back(expoly.contour);
         //do it separately because we don't want to union them
         for (ExPolygon& big_expoly : offset_ex(expoly, double(scaled_spacing) * 0.5, jtSquare)) {
-            big_expoly.assert_point_distance();
+            big_expoly.douglas_peucker(scaled_resolution_brim);
             bigger_islands.emplace_back(big_expoly);
             unbrimmable_polygons.insert(unbrimmable_polygons.end(), big_expoly.holes.begin(), big_expoly.holes.end());
         }
