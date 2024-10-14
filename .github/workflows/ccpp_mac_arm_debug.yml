@@ -15,17 +15,17 @@ jobs:
       with:
         ref: 'debug_macos'
     - name: build deps & slicer
-      run: ./BuildMacOS.sh -bia
+      run: ./BuildMacOS.sh -badsi
     - name: ls build
       working-directory: ./build
       run: ls
     - name: Upload artifact
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v4.0.0
       with:
         name: nightly_macos_arm_debug.dmg
         path: build/${{ github.event.repository.name }}.dmg
     - name: Upload artifact
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v4.0.0
       with:
         name: nightly_arm_macos.tar
         path: build/${{ github.event.repository.name }}.tar
