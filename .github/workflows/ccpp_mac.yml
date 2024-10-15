@@ -13,19 +13,16 @@ jobs:
 
     runs-on: macos-12
 
+
     steps:
     - uses: actions/checkout@v3
     - name: check autoconf version
-      run: autoconf --version
-    - name: update automake for mpfr
       run: |
-        curl -O -L http://ftpmirror.gnu.org/automake/automake-1.16.5.tar.gz
-        tar -xzf automake-1.16.5.tar.gz
-        cd automake-*
-        ./configure
-        make
-        sudo make install
+        autoconf --version
         automake --version
+        glibtool --version
+        which autoreconf
+        ls /usr/local/bin
     - name: build deps & slicer
       run: ./BuildMacOS.sh -dsi
     - name: Upload artifact
