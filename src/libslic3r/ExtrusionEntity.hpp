@@ -639,6 +639,8 @@ struct HasThisRoleVisitor : public HasRoleVisitor{
 //call simplify for all paths.
 class ConfigOptionFloatOrPercent;
 class SimplifyVisitor : public ExtrusionVisitorRecursive {
+public:
+    using ExtrusionVisitorRecursive::use;
     bool m_use_arc_fitting;
     coordf_t m_scaled_resolution;
     const ConfigOptionFloatOrPercent* m_arc_fitting_tolearance;
@@ -649,6 +651,7 @@ public:
 };
 class GetPathsVisitor : public ExtrusionVisitorRecursive {
 public:
+    using ExtrusionVisitorRecursive::use;
     std::vector<ExtrusionPath*> paths;
     std::vector<ExtrusionPath3D*> paths3D;
     virtual void use(ExtrusionPath& path) override {
@@ -660,6 +663,8 @@ public:
 };
 
 class ExtrusionVolume : public ExtrusionVisitorRecursiveConst {
+public:
+    using ExtrusionVisitorRecursiveConst::use;
     bool _with_gap_fill = true;
 public:
     double volume = 0; //unscaled
@@ -672,8 +677,9 @@ public:
 };
 
 class ExtrusionModifyFlow : public ExtrusionVisitorRecursive {
-    double _flow_mult = 1.;
 public:
+    using ExtrusionVisitorRecursive::use;
+    double _flow_mult = 1.;
     ExtrusionModifyFlow(double flow_mult) : _flow_mult(flow_mult) {}
     void use(ExtrusionPath &path) override { path.mm3_per_mm *= _flow_mult; path.width *= _flow_mult; }
     void use(ExtrusionPath3D &path3D) override { path3D.mm3_per_mm *= _flow_mult; path3D.width *= _flow_mult; }
@@ -683,6 +689,8 @@ public:
     
 #if _DEBUG
 struct LoopAssertVisitor : public ExtrusionVisitorRecursiveConst {
+public:
+    using ExtrusionVisitorRecursiveConst::use;
     virtual void default_use(const ExtrusionEntity& entity) override {};
     virtual void use(const ExtrusionPath &path) override { assert(path.length() > SCALED_EPSILON); }
     virtual void use(const ExtrusionLoop &loop) override {
